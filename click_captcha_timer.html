@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>验证码计时器</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 10px;
+        }
+
+        .container {
+            background: white;
+            padding: 15px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            text-align: center;
+            width: 100%;
+            max-width: 380px;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+
+        /* 我把 instruction 的颜色背景保留，但去掉了在 captcha-box 内的定位相关限制 */
+        .instruction {
+            color: #fff;
+            font-size: 14px;
+            margin: 12px 0 10px; /* 增加上/下间距，使其清晰位于框下方 */
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+            background: rgba(102, 126, 234, 0.8);
+            padding: 8px;
+            border-radius: 5px;
+            display: inline-block;
+        }
+        
+        .captcha-box {
+            position: relative;
+            width: 100%;
+            margin: 0 auto;
+            background: 
+                repeating-linear-gradient(45deg, #2a2a2a 0px, #2a2a2a 10px, #3a3a3a 10px, #3a3a3a 20px),
+                repeating-linear-gradient(-45deg, #1a1a1a 0px, #1a1a1a 10px, transparent 10px, transparent 20px);
+            background-size: 100% 100%, 20px 20px;
+            border-radius: 8px;
+            padding: 15px 10px;
+            height: 220px;
+            display: flex;
+            flex-direction: column;
+            border: 3px solid #555;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.5);
+            margin-bottom: 8px; /* 让框与下面的 instruction 有空隙 */
+        }
+
+        .chars-container {
+            position: relative;
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .char {
+            font-size: 45px;
+            font-weight: bold;
+            color: #00d4ff;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.8), -1px -1px 2px rgba(255,255,255,0.3);
+            user-select: none;
+            position: absolute;
+            font-family: 'SimSun', 'KaiTi', serif;
+            filter: blur(0.3px);
+        }
+
+        .char:hover {
+            transform: scale(1.1);
+            color: #00ffff;
+        }
+
+        .char.clicked {
+            opacity: 0.3;
+            pointer-events: none;
+        }
+
+        .controls {
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+            margin-top: 10px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 14px;
+            font-weight: bold;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
+            touch-action: manipulation;
+        }
+
+        .start-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .start-btn:active {
+            transform: scale(0.95);
+        }
+
+        .confirm-btn {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            display: none;
+        }
+
+        .confirm-btn:active {
+            transform: scale(0.95);
+        }
+
+        .refresh-btn {
+            background: white;
+            color: #667eea;
+            border: 2px solid #667eea;
+        }
+
+        .refresh-btn:active {
+            background: #667eea;
+            color: white;
+        }
+
+        .result {
+            margin-top: 15px;
+            padding: 15px;
+            background: #f0f4ff;
+            border-radius: 8px;
+            display: none;
+        }
+
+        .result h2 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+
+        .time-display {
+            font-size: 32px;
+            font-weight: bold;
+            color: #764ba2;
+            margin: 15px 0;
+        }
+
+        .stats {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 15px;
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-label {
+            color: #666;
+            font-size: 12px;
+            margin-bottom: 5px;
+        }
+
+        .stat-value {
+            color: #333;
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎯 验证码速度测试</h1>
+        
+        <div class="captcha-box" id="captchaBox">
+            <!-- instruction 已移出 captcha-box -->
+            <div class="chars-container" id="charsContainer"></div>
+        </div>
+
+        <!-- 把 instruction 放到选字框（captcha-box）下面 -->
+        <div class="instruction" id="instruction">请在下图依次点击：</div>
+
+        <div class="controls">
+            <button class="start-btn" id="startBtn" onclick="startTest()">开始测试</button>
+            <button class="confirm-btn" id="confirmBtn" onclick="confirmTest()">确认</button>
+            <button class="refresh-btn" id="refreshBtn" onclick="refreshTest()" style="display: none;">重新测试</button>
+        </div>
+
+        <div class="result" id="result">
+            <h2>测试结果</h2>
+            <div class="time-display" id="timeDisplay">0.00秒</div>
+            <div class="stats">
+                <div class="stat-item">
+                    <div class="stat-label">点击次数</div>
+                    <div class="stat-value" id="clickCount">0</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">平均每字</div>
+                    <div class="stat-value" id="avgTime">0.00s</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let startTime = null;
+        let endTime = null;
+        let currentSequence = [];
+        let clickedSequence = [];
+        let targetChars = [];
+
+        const charSets = [
+            ['骥', '骧', '骜', '骁'],
+            ['琼', '瑶', '璇', '玑'],
+            ['岚', '峦', '嵘', '峻'],
+            ['澜', '涛', '渊', '沧'],
+            ['霖', '霏', '霓', '霞'],
+            ['麒', '麟', '鸿', '鹄'],
+            ['昊', '煜', '曦', '旭'],
+            ['瑾', '瑜', '璟', '瑷'],
+            ['黛', '璐', '嵩', '瀚'],   // 黑 + 玉 + 山 + 水（四种部首）
+    ['燊', '锘', '翊', '靥'],   // 火 + 金 + 羽 + 面（非同类但轮廓像）
+    ['霰', '澧', '嶷', '瑗'],   // 雨 + 水 + 山 + 玉（视觉密度相近）
+    ['麓', '璨', '鋆', '飏'],   // 鹿 + 玉 + 金 + 风（尖角多、笔画乱）
+    ['曦', '瀛', '豫', '霁'],   // 日 + 水 + 豕 + 雨（结构复杂）
+    ['赟', '翯', '烽', '嶙'],   // 贝 + 羽 + 火 + 山（偏旁不同但笔画密）
+    ['耀', '懿', '璜', '巽'],   // 羽 + 心 + 玉 + 己结构（形状接近）
+    ['魇', '瓒', '螭', '隽'],   // 鬼 + 玉 + 虫 + 免（整组视觉差异小）
+    ['飓', '缦', '赟', '彧'],   // 风 + 纟 + 贝 + 彡（易混但部首不同）
+    ['飒', '璞', '辔', '矍']
+        ];
+
+        function startTest() {
+            // 随机选择一组字符
+            targetChars = charSets[Math.floor(Math.random() * charSets.length)];
+            currentSequence = [...targetChars];
+            clickedSequence = [];
+            
+            // 更新提示文字
+            document.getElementById('instruction').textContent = `请在下图依次点击：${targetChars.join('')}`;
+            
+            // 随机打乱字符位置
+            const shuffled = [...currentSequence].sort(() => Math.random() - 0.5);
+            
+            // 创建字符元素 - 防止重叠
+            const container = document.getElementById('charsContainer');
+            container.innerHTML = '';
+            
+            const positions = [];
+            const charSize = 50; // 字符占用的大概尺寸
+            const containerWidth = 340; // 容器实际宽度
+            const containerHeight = 190; // 容器实际高度
+            const maxAttempts = 100; // 最大尝试次数
+            
+            shuffled.forEach((char, index) => {
+                const charDiv = document.createElement('div');
+                charDiv.className = 'char';
+                charDiv.textContent = char;
+                charDiv.onclick = () => clickChar(char, charDiv);
+                
+                // 尝试找到不重叠的位置
+                let x, y, attempts = 0;
+                let isOverlap = true;
+                
+                while (isOverlap && attempts < maxAttempts) {
+                    // 随机位置
+                    x = charSize + Math.random() * (containerWidth - charSize * 2);
+                    y = charSize + Math.random() * (containerHeight - charSize * 2);
+                    
+                    // 检查是否与已有位置重叠
+                    isOverlap = positions.some(pos => {
+                        const distance = Math.sqrt(Math.pow(x - pos.x, 2) + Math.pow(y - pos.y, 2));
+                        return distance < charSize * 1.2; // 保持一定间距
+                    });
+                    
+                    attempts++;
+                }
+                
+                // 记录位置
+                positions.push({x, y});
+                
+                // 随机倾斜角度
+                const rotation = -25 + Math.random() * 50;
+                
+                // 随机缩放
+                const scale = 0.9 + Math.random() * 0.25;
+                
+                charDiv.style.left = x + 'px';
+                charDiv.style.top = y + 'px';
+                charDiv.style.transform = `translate(-50%, -50%) rotate(${rotation}deg) scale(${scale})`;
+                
+                // 添加随机干扰
+                charDiv.style.letterSpacing = (Math.random() * 3 - 1.5) + 'px';
+                
+                container.appendChild(charDiv);
+            });
+
+            // 记录开始时间
+            startTime = Date.now();
+            
+            // 显示确认按钮，隐藏开始按钮
+            document.getElementById('startBtn').style.display = 'none';
+            document.getElementById('confirmBtn').style.display = 'inline-block';
+            document.getElementById('result').style.display = 'none';
+        }
+
+        function clickChar(char, element) {
+            if (!startTime) return;
+            
+            clickedSequence.push(char);
+            element.classList.add('clicked');
+            
+            // 如果点击完所有字符，自动确认
+            if (clickedSequence.length === currentSequence.length) {
+                setTimeout(() => confirmTest(), 300);
+            }
+        }
+
+        function confirmTest() {
+            if (!startTime || clickedSequence.length === 0) return;
+            
+            endTime = Date.now();
+            const timeTaken = (endTime - startTime) / 1000;
+            
+            // 检查顺序是否正确
+            const isCorrect = clickedSequence.every((char, index) => char === currentSequence[index]);
+            
+            // 显示结果
+            document.getElementById('timeDisplay').textContent = timeTaken.toFixed(2) + '秒';
+            document.getElementById('clickCount').textContent = clickedSequence.length;
+            document.getElementById('avgTime').textContent = (timeTaken / clickedSequence.length).toFixed(2) + 's';
+            
+            const resultDiv = document.getElementById('result');
+            resultDiv.style.display = 'block';
+            
+            if (isCorrect) {
+                resultDiv.style.background = '#d4edda';
+                resultDiv.querySelector('h2').textContent = '✅ 验证成功！';
+            } else {
+                resultDiv.style.background = '#f8d7da';
+                resultDiv.querySelector('h2').textContent = '❌ 顺序错误';
+            }
+            
+            // 显示重新测试按钮
+            document.getElementById('confirmBtn').style.display = 'none';
+            document.getElementById('refreshBtn').style.display = 'inline-block';
+        }
+
+        function refreshTest() {
+            document.getElementById('startBtn').style.display = 'inline-block';
+            document.getElementById('refreshBtn').style.display = 'none';
+            document.getElementById('confirmBtn').style.display = 'none';
+            document.getElementById('charsContainer').innerHTML = '';
+            document.getElementById('instruction').textContent = '请在下图依次点击：骥骧骜骁';
+            startTime = null;
+            endTime = null;
+        }
+    </script>
+</body>
+</html>
